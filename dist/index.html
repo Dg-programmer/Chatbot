@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en" data-background="sky" data-color-mode="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#e8f4ff">
+  <meta name="description" content="Talk, analyze files, and explore the web with BABY, your interactive AI companion.">
+  <title>BABY — Voice companion</title>
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app">
+    <button class="backdrop" id="backdrop" type="button" aria-hidden="true" tabindex="-1" hidden></button>
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-mark" data-icon="sparkles" aria-hidden="true"></div>
+        <div><span class="brand-name" data-text="name">BABY</span><span class="brand-description" data-text="appDescription">Your AI voice assistant</span></div>
+      </div>
+      <button class="new-chat" id="new-chat" type="button">
+        <span data-icon="plus"></span><span data-text="newChat">New chat</span>
+      </button>
+      <div class="history-head">
+        <h2 data-text="chats">Conversations</h2>
+        <button class="icon-button small" id="search-toggle" type="button" data-label="searchChats" aria-expanded="false" aria-controls="search" data-icon="search"></button>
+      </div>
+      <input class="history-search" id="search" type="search" data-field="searchChats" hidden>
+      <p class="history-empty" id="history-empty"></p>
+      <nav class="history-list" id="history" data-aria="chats"></nav>
+      <div class="sidebar-bottom">
+        <button class="voice-settings" id="settings" type="button">
+          <span class="settings-icon" data-icon="sliders"></span>
+          <span data-text="voiceSettings">Voice settings</span>
+          <span class="settings-arrow" data-icon="chevron-right"></span>
+        </button>
+        <button class="local-status" id="engine" type="button">
+          <span class="local-dot"></span><span id="engine-label">Local assistant</span>
+          <span data-icon="info"></span>
+        </button>
+        <form id="hosted-sign-out" action="./logout" method="post" hidden>
+          <button class="local-status" type="submit">Sign out</button>
+        </form>
+      </div>
+    </aside>
+
+    <main class="main" id="main" data-mode="chat" data-state="idle">
+      <header class="topbar">
+        <div class="topbar-start">
+          <button class="icon-button mobile-menu" id="open-sidebar" data-label="openSidebar" data-icon="panel" type="button" aria-controls="sidebar" aria-expanded="false"></button>
+          <div class="mode-tabs" role="group">
+            <button type="button" data-mode-choice="chat" aria-label="Chat" aria-pressed="true"><span data-icon="chat"></span><span class="mode-caption" data-text="chat">Chat</span></button>
+            <button type="button" data-mode-choice="voice" aria-label="Voice" aria-pressed="false"><span data-icon="wave"></span><span class="mode-caption" data-text="voice">Voice</span></button>
+          </div>
+        </div>
+        <div class="topbar-end">
+          <button class="header-control" id="pet-guide" type="button" aria-haspopup="dialog" aria-controls="pet-dialog" aria-label="Get browser pet">
+            <span data-icon="pet"></span><span class="header-caption">Browser pet</span>
+          </button>
+          <div class="background-control">
+            <button class="header-control" id="background-toggle" type="button" aria-label="Change background" aria-expanded="false" aria-controls="background-menu">
+              <span data-icon="layers"></span><span class="header-caption">Background</span>
+            </button>
+            <div class="popover background-menu" id="background-menu" hidden>
+              <button type="button" data-background-choice="sky" aria-pressed="true"><span class="theme-swatch" aria-hidden="true"></span>Sky</button>
+              <button type="button" data-background-choice="glacier" aria-pressed="false"><span class="theme-swatch" aria-hidden="true"></span>Glacier</button>
+              <button type="button" data-background-choice="cobalt" aria-pressed="false"><span class="theme-swatch" aria-hidden="true"></span>Cobalt</button>
+            </div>
+          </div>
+          <button class="icon-button" id="color-mode" type="button" aria-label="Switch to dark mode" aria-pressed="false" data-icon="moon"></button>
+          <button class="icon-button speaker-button" id="speaker" type="button" data-icon="volume"></button>
+          <div class="thread-actions" id="thread-actions" hidden>
+            <button class="icon-button" id="more" type="button" data-label="chatActions" data-icon="more" aria-expanded="false" aria-controls="actions-menu"></button>
+            <div class="popover" id="actions-menu" hidden>
+              <button type="button" id="rename"><span data-icon="edit"></span><span data-text="renameChat"></span></button>
+              <button type="button" id="export"><span data-icon="download"></span><span data-text="exportChat"></span></button>
+              <button type="button" class="danger" id="delete"><span data-icon="trash"></span><span data-text="deleteChat"></span></button>
+            </div>
+          </div>
+        </div>
+      </header>
+      <section class="scene" id="scene">
+        <div class="room-light" aria-hidden="true"></div>
+        <div class="content" id="content">
+          <section class="welcome" id="welcome" aria-labelledby="heading">
+            <div class="welcome-hero">
+              <div class="hero-copy">
+                <div class="status-badge"><span class="status-dot"></span><span id="hero-status">Ready to chat</span></div>
+                <h1 id="heading">What’s on your mind?</h1>
+                <p id="welcome-copy">Talk through an idea, write something new, or attach a file to explore it together.</p>
+              </div>
+              <div class="hero-visual">
+                <div class="orbit-stage" id="avatar-stage">
+                  <div class="orb-light"></div>
+                  <div class="orbit-disc orbit-far"></div><div class="orbit-disc orbit-near"></div>
+                  <div class="star star-one"></div><div class="star star-two"></div><div class="star star-three"></div>
+                  <div class="float-shadow"></div>
+                  <div class="avatar">
+                    <img src="./pet.webp" width="720" height="720" alt="" fetchpriority="high">
+                    <div class="avatar-mouth"><i></i><i></i><i></i><i></i><i></i></div>
+                  </div>
+                  <span class="orbit-hint" aria-hidden="true"><span data-icon="rotate"></span>Drag to rotate</span>
+                </div>
+              </div>
+            </div>
+            <div class="quick-start" id="quick-start">
+              <h2 data-text="suggestionHeading">Try asking</h2>
+              <div id="suggestions" class="suggestions"></div>
+            </div>
+          </section>
+          <div class="transcript" id="transcript" role="log" aria-live="polite" aria-relevant="additions" hidden></div>
+        </div>
+      </section>
+      <footer class="footer">
+        <div class="footer-inner">
+          <div id="notice" class="notice" role="status" hidden><span data-icon="info"></span><span id="notice-text"></span><button type="button" id="notice-close" data-icon="x" data-label="close" class="icon-button small"></button></div>
+          <div class="voice-control" id="voice-control" hidden>
+            <button type="button" id="large-mic" class="large-mic" data-icon="mic"></button>
+            <span id="voice-hint"></span>
+            <button type="button" id="replay-last" class="icon-button" data-label="replayLast" data-icon="volume" hidden></button>
+          </div>
+          <form class="composer" id="composer">
+            <ul class="attachment-queue" id="attachment-queue" aria-label="Files included in this chat" hidden></ul>
+            <div class="composer-row">
+              <button class="icon-button attachment-button" id="attach" type="button" data-label="attach" data-icon="paperclip"></button>
+              <input type="file" id="file-input" multiple hidden>
+              <textarea rows="1" maxlength="6000" id="draft" data-field="placeholder" data-aria="composerLabel" spellcheck="true"></textarea>
+              <div class="composer-actions">
+                <button class="icon-button mic-button" id="mic" type="button" data-icon="mic"></button>
+                <button class="send-button" id="send" type="submit" data-label="send" data-icon="send"></button>
+              </div>
+            </div>
+          </form>
+          <div class="footer-note"><span id="footer-status"></span><span class="keyboard-hint" data-text="keyboardHint"></span></div>
+        </div>
+      </footer>
+    </main>
+  </div>
+
+  <dialog class="dialog pet-dialog" id="pet-dialog" aria-labelledby="pet-title">
+    <div class="dialog-title"><h2 id="pet-title">BABY Browser Pet</h2><button type="button" class="icon-button" data-close data-label="close" data-icon="x"></button></div>
+    <div class="dialog-form">
+      <div class="pet-guide-summary">
+        <img src="./pet.webp" width="68" height="68" alt="">
+        <p>Move BABY around a webpage, then click to chat, speak, or attach a file.</p>
+      </div>
+      <ol class="pet-steps">
+        <li>Download and unzip the extension.</li>
+        <li>Open <code>chrome://extensions</code> or <code>edge://extensions</code> and turn on <strong>Developer mode</strong>.</li>
+        <li>Choose <strong>Load unpacked</strong> and select the extracted folder named <strong>extension</strong>.</li>
+        <li id="pet-run-local">Keep local BABY open and connected. Reload the webpage, then click the pet.</li>
+        <li id="pet-run-hosted" hidden>Pair the extension with your hosted BABY below. Reload the webpage, then click the pet.</li>
+      </ol>
+      <p class="dialog-note">When you send a question, BABY sends readable page text and attached files to your connected model.</p>
+      <section class="pairing" id="hosted-pairing" aria-labelledby="pairing-title" hidden>
+        <h3 id="pairing-title">Connect the extension</h3>
+        <p>Open the pet’s <strong>Connection settings</strong> and paste this address and a one-time code.</p>
+        <label for="pairing-origin">Hosted address</label>
+        <input id="pairing-origin" readonly spellcheck="false">
+        <div id="pairing-result" class="pairing-result" hidden>
+          <label for="pairing-code">Connection code</label>
+          <div class="pairing-row">
+            <input id="pairing-code" readonly spellcheck="false" autocomplete="off">
+            <button class="secondary" id="pairing-copy" type="button"><span data-icon="copy"></span>Copy</button>
+          </div>
+        </div>
+        <button class="secondary" id="pairing-generate" type="button">Create connection code</button>
+        <p class="dialog-note" id="pairing-message" role="status"></p>
+      </section>
+      <div class="dialog-actions">
+        <a class="primary" id="pet-download" href="./baby-page-pet.zip" download><span data-icon="download"></span>Download extension</a>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog class="dialog" id="settings-dialog" aria-labelledby="settings-title">
+    <div class="dialog-title"><h2 id="settings-title" data-text="voiceSettings"></h2><button type="button" class="icon-button" data-close data-label="close" data-icon="x"></button></div>
+    <div class="dialog-form">
+      <label class="setting-row"><span data-text="voiceSelection"></span><select id="voice-select"></select></label>
+      <label class="setting-row range-row"><span data-text="speechRate"></span><span><input type="range" id="rate" min="0.7" max="1.35" step="0.05"><output id="rate-value" for="rate"></output></span></label>
+      <label class="setting-row"><span data-text="autoSpeak"></span><input type="checkbox" class="switch" id="auto-speak"></label>
+      <label class="setting-row"><span data-text="autoSend"></span><input type="checkbox" class="switch" id="auto-send"></label>
+      <button type="button" class="secondary test-voice" id="test-voice"><span data-icon="volume"></span><span id="test-voice-label"></span></button>
+      <p id="voice-feedback" role="status" hidden></p>
+      <p class="dialog-note" id="speech-privacy"></p>
+    </div>
+  </dialog>
+  <dialog class="dialog" id="engine-dialog" aria-labelledby="engine-title">
+    <div class="dialog-title"><h2 id="engine-title" data-text="connection"></h2><button type="button" class="icon-button" data-close data-label="close" data-icon="x"></button></div>
+    <div class="dialog-form">
+      <p id="engine-description"></p>
+      <p class="dialog-note" id="engine-note"></p>
+      <p class="dialog-note" data-text="privacy"></p>
+    </div>
+  </dialog>
+  <dialog class="dialog" id="rename-dialog" aria-labelledby="rename-title">
+    <div class="dialog-title"><h2 id="rename-title" data-text="renameChat"></h2><button type="button" class="icon-button" data-close data-label="close" data-icon="x"></button></div>
+    <form class="dialog-form" id="rename-form">
+      <label for="title-input" data-text="chatTitle"></label>
+      <input type="text" id="title-input" maxlength="100" required>
+      <div class="dialog-actions"><button type="button" class="secondary" data-close data-text="cancel"></button><button class="primary" type="submit" data-text="save"></button></div>
+    </form>
+  </dialog>
+  <dialog class="dialog" id="delete-dialog" aria-labelledby="delete-title">
+    <div class="dialog-title"><h2 id="delete-title" data-text="confirmDelete"></h2><button type="button" class="icon-button" data-close data-label="close" data-icon="x"></button></div>
+    <div class="dialog-form dialog-actions"><button type="button" class="secondary" data-close data-text="cancel"></button><button type="button" class="destructive" id="confirm-delete" data-text="deleteConfirm"></button></div>
+  </dialog>
+  <noscript>This app needs JavaScript.</noscript>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: baby-voice
+    runtime: node
+    plan: free
+    buildCommand: npm install --omit=dev --no-audit --no-fund
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "24.x"
+      - key: BABY_OWNER_PASSWORD
+        sync: false
+      - key: BABY_SESSION_SECRET
+        generateValue: true
+      - key: SAATHI_AI_API_KEY
+        sync: false
+      - key: SAATHI_AI_MODEL
+        value: gpt-6-luna
