@@ -137,9 +137,9 @@
 
   const errors = {
     "server-offline": "Local BABY is unavailable. Start it on this computer and try again.",
-    "provider-unconfigured": "Open BABY and connect OpenAI to analyze this page.",
-    "provider-auth": "OpenAI rejected the connection. Check the credentials in BABY.",
-    "provider-rate-limited": "The OpenAI usage limit was reached. Try again later.",
+    "provider-unconfigured": "Open BABY and connect an AI model to analyze this page.",
+    "provider-auth": "The AI provider rejected the API key. Check your BABY setup.",
+    "provider-rate-limited": "Your AI project reached its usage limit. Try again later.",
     "analysis-busy": "BABY is answering another page question. Try again in a moment.",
     "analysis-timeout": "The answer took too long. Try a shorter question or try again.",
     "page-empty": "There isn’t readable page text to analyze. Attach a file or try an article or search results page.",
@@ -342,7 +342,7 @@
   function disconnectedLabel(code) {
     if (code === "extension-auth-required") return "Pair hosted BABY";
     if (code === "host-permission-required") return "Host permission needed";
-    if (!code || code === "provider-unconfigured" || code === "provider-auth") return "Connect OpenAI";
+    if (!code || code === "provider-unconfigured" || code === "provider-auth") return "Connect AI";
     return activeConnection.mode === "hosted" ? "Hosted BABY unavailable" : "Local BABY unavailable";
   }
 
@@ -383,7 +383,7 @@
     }
     if (connectionRevision !== revision) return;
     rememberConnection(status);
-    if (status?.connected) setConnection("on", "OpenAI connected");
+    if (status?.connected) setConnection("on", "AI connected");
     else setConnection("off", disconnectedLabel(status?.error));
   }
 
@@ -444,7 +444,7 @@
       const reply = result.reply.slice(0, 12000);
       history = [...history, { role: "user", text: question }, { role: "assistant", text: reply }].slice(-10);
       if (input.value.trim() === question) input.value = "";
-      setConnection("on", "OpenAI connected");
+      setConnection("on", "AI connected");
       if (readAloud && !panel.hidden) voice.speak(reply);
     } else {
       const code = result?.error || "analysis-failed";

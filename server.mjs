@@ -21,6 +21,7 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("PORT m
 
 const hostedAuth = createHostedAuth(process.env, sendJSON);
 const dist = await realpath(fileURLToPath(new URL("dist/", import.meta.url)));
+const geminiChatEndpoint = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
 let provider = configureProvider();
 const handleKeySetup = !hostedAuth && !provider && process.env.SAATHI_LOCAL_KEY_SETUP === "1"
   ? createLocalKeySetup((key) => {
@@ -94,6 +95,11 @@ function openAIProvider(model, key) {
 function configureProvider() {
   const model = process.env.SAATHI_AI_MODEL?.trim();
   if (!model) return null;
+
+  if (process.env.SAATHI_AI_PROVIDER === "gemini") {
+    const key = process.env.GEMINI_API_KEY?.trim();
+    return key ? { url: new URL(geminiChatEndpoint), model, key } : null;
+  }
 
   const base = new URL(process.env.SAATHI_AI_BASE_URL?.trim() || "https://api.openai.com/v1");
   const local = ["localhost", "127.0.0.1", "[::1]"].includes(base.hostname);
@@ -256,7 +262,9 @@ async function* providerReply(selected, messages, instructions, maxOutputTokens,
   });
   if (!result.ok) {
     await result.body?.cancel();
-    const received = selected.attachments ? openAIErrorCode(result.status) : "provider-rejected";
+    const received = selected.attachments || selected.url.href === geminiChatEndpoint
+      ? openAIErrorCode(result.status)
+      : "provider-rejected";
     const isFileRejection = received === "provider-rejected"
       && [400, 413, 415, 422].includes(result.status) && messages.some(({ attachments }) => attachments.length);
     throw new RequestError(received === "provider-rate-limited" ? 429 : 502, isFileRejection ? "provider-attachment-rejected" : received);

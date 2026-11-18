@@ -13,7 +13,9 @@ services:
         sync: false
       - key: BABY_SESSION_SECRET
         generateValue: true
-      - key: SAATHI_AI_API_KEY
+      - key: GEMINI_API_KEY
         sync: false
+      - key: SAATHI_AI_PROVIDER
+        value: gemini
       - key: SAATHI_AI_MODEL
-        value: gpt-6-luna
+        value: gemini-3.5-flash-lite

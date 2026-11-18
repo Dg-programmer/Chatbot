@@ -2,7 +2,7 @@
 
 BABY is an English voice companion for chat, file analysis, and questions about webpages. Talk through your microphone or type, then hear replies through your speakers. Use **Voice** for a larger microphone control and **Chat** for starter prompts.
 
-For password-protected hosting and a browser pet connected to a remote server, see the [Render deployment guide](./RENDER.md).
+For password-protected hosting with Gemini and a browser pet connected to the hosted app, see the [Render Free deployment guide](./RENDER.md).
 
 ## Run locally
 

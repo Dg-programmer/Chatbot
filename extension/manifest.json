@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "BABY Page Pet",
   "description": "A movable voice companion for chatting about webpages and attachments.",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0i1EqadnoHuNa+p4QQgc3YVxBnnBpPe4c1pgqu7mIC6NEj3oer0AtJvEW2M0pbtUCOdjDgWZIOXi6pyZQhM69z0gFHy01ICZauIXt3+cmoz8GdedSv7MNuMk6ol2kKINW3p8NUFD92Fzz6T2+4+l++LFr88lCatv9y8AWFO4XxAQ0Nlyt3aI0j39tq0ZzEEglacxYmAxhY/060EB35esgtEpc8gTWMUOTvaukJH60hDTZ+DJpwJX6dxGRyLlAUhN3awyeW87NBB0mSE/o6invFyHOF1P7GVm7wSaf53GfcXXTkfZhftEXtC3wNUKtGkxAaq1IyXYrfjd7NjA8y+WpQIDAQAB",
   "action": {
     "default_title": "Open BABY Page Pet",

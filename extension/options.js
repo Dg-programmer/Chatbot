@@ -18,7 +18,7 @@ let revision = 0;
 
 function describe(result) {
   const name = result.mode === "hosted" ? `Hosted BABY (${new URL(result.origin).hostname})` : "Local BABY";
-  if (result.connected) return `${name} is connected to OpenAI.`;
+  if (result.connected) return `${name} has an AI model configured.`;
   if (result.error === "extension-auth-required") return `${name} needs to be paired again. Generate a new code after signing in.`;
   if (result.error === "host-permission-required") return `${name} needs access to its host. Pair it again to allow access.`;
   if (result.error === "server-offline" || result.error === "analysis-timeout") {
@@ -29,7 +29,7 @@ function describe(result) {
   if (result.error && !["provider-auth", "provider-unconfigured"].includes(result.error)) {
     return errors[result.error] || "Could not check the connection. Reload the extension and try again.";
   }
-  return `${name} needs an OpenAI connection. Open BABY to check its setup.`;
+  return `${name} needs an AI model. Open BABY to check its setup.`;
 }
 
 function render(result) {

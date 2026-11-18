@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#e8f4ff">
   <meta name="description" content="Talk, analyze files, and explore the web with BABY, your interactive AI companion.">
   <title>BABY — Voice companion</title>
-  <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0OCA0OCI+PHJlY3QgeD0iMiIgeT0iMiIgd2lkdGg9IjQ0IiBoZWlnaHQ9IjQ0IiByeD0iMTMiIGZpbGw9IiMxNDU5YzAiLz48cGF0aCBmaWxsPSIjZWRmOGZmIiBkPSJNMjIgMTBjMS4zIDkgMy40IDExIDEyIDEyLTguNiAxLjMtMTAuNyAzLjUtMTIgMTItMS4zLTguNS0zLjQtMTAuNy0xMi0xMiA4LjYtMSAxMC43LTMgMTItMTJabTEzIDE3Yy42IDQuMiAxLjcgNS40IDYgNi00LjMuNi01LjQgMS44LTYgNi0uNi00LjItMS43LTUuNC02LTYgNC4zLS42IDUuNC0xLjggNi02WiIvPjwvc3ZnPg0K" type="image/svg+xml">
+  <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0OCA0OCI+PHJlY3QgeD0iMiIgeT0iMiIgd2lkdGg9IjQ0IiBoZWlnaHQ9IjQ0IiByeD0iMTMiIGZpbGw9IiMxNDU5YzAiLz48cGF0aCBmaWxsPSIjZWRmOGZmIiBkPSJNMjIgMTBjMS4zIDkgMy40IDExIDEyIDEyLTguNiAxLjMtMTAuNyAzLjUtMTIgMTItMS4zLTguNS0zLjQtMTAuNy0xMi0xMiA4LjYtMSAxMC43LTMgMTItMTJabTEzIDE3Yy42IDQuMiAxLjcgNS40IDYgNi00LjMuNi01LjQgMS44LTYgNi0uNi00LjItMS43LTUuNC02LTYgNC4zLS42IDUuNC0xLjggNi02WiIvPjwvc3ZnPgo=" type="image/svg+xml">
   <style>
 
 :root {
@@ -410,7 +410,6 @@ svg { display: block; width: 19px; height: 19px; flex: none; }
   *, *::before, *::after { transition-duration: 0s !important; animation-duration: 0s !important; }
 }
 
-
 </style>
 </head>
 <body>
@@ -697,9 +696,9 @@ const locales = {
     "cancel": "Cancel",
     "you": "You",
     "responseError": "I couldn’t complete that reply. Please try again.",
-    "modelKeyError": "OpenAI rejected the current API credentials. Check the key and its project permissions.",
-    "modelLimitError": "OpenAI’s usage limit was reached. Check your API project’s usage and billing, then try again.",
-    "modelNeedsKey": "Connected AI needs an OpenAI API key in the site’s runtime settings.",
+    "modelKeyError": "The AI provider rejected the API key. Check the key and its project permissions.",
+    "modelLimitError": "Your AI project reached its usage limit. Check the quota before trying again.",
+    "modelNeedsKey": "Add your API key to BABY’s server settings to connect a model.",
     "localMode": "Local assistant",
     "aiMode": "Connected AI",
     "modeLocalDescription": "Try guided tasks such as planning, drafting, and simple calculations.",
@@ -3100,7 +3099,6 @@ if (location.protocol !== "file:") {
     })
     .catch(() => {});
 }
-
 
 })();
 </script>
