@@ -6,7 +6,7 @@ BABY uses your OpenAI API key for AI replies and analysis. OpenAI bills API usag
 
 ## Deploy and sign in
 
-1. Extract `BABY-Render-source.zip`, then commit and push its contents to a new private repository you control. Put `render.yaml`, `package.json`, and `server.mjs` at the repository root. Keep the `dist/` and `extension/` directories in place, including `dist/baby-page-pet.zip`, which the app serves directly. Keep API keys, passwords, and local `.env` files out of Git.
+1. Use a GitHub repository you control with `render.yaml`, `package.json`, and `server.mjs` at its root. If you started from the source ZIP, extract and push its contents to that repository. Keep `dist/` and `extension/` in place. The app serves `dist/baby-page-pet.zip` directly. Use `.env.example` for placeholders and keep your local `.env` out of Git.
 2. In the Render Dashboard, select **New → Blueprint**. Connect your repository, select its branch, and verify that the proposed `baby-voice` service shows the **Free** plan. [Render Blueprint setup](https://render.com/docs/infrastructure-as-code#setup)
 3. When Render prompts for environment values, enter the two credentials below. Render generates `BABY_SESSION_SECRET` automatically. [Render Blueprint environment variables](https://render.com/docs/blueprint-spec#environment-variables)
 

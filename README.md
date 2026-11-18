@@ -51,6 +51,6 @@ On Windows, double-click **Start-BABY.cmd**. You can also run `node start-privat
 
 The browser sends the key to BABY’s server on this computer. The server holds it in memory for the session. Close the launcher when you finish. Chat prompts go to OpenAI and spoken replies use your browser's voices.
 
-The local server uses the Responses API for OpenAI and supports OpenAI-compatible Chat Completions endpoints for text chat. Create a local `.env` file from `.env.example`, set your model and provider settings, then restart the server. **Assistant connection** in the sidebar shows when the server is configured.
+The local server uses the Responses API for OpenAI and supports OpenAI-compatible Chat Completions endpoints for text chat. To keep your key between launches on this computer, copy `.env.example` to `.env` and enter your key on the `SAATHI_AI_API_KEY=` line. Run `npm start` from this folder, then open **Assistant connection** in the sidebar to check the configuration. The local `.env` is ignored by Git. For Render, enter your key in the dashboard.
 
 For an already running local Ollama instance, use `SAATHI_AI_BASE_URL=http://127.0.0.1:11434/v1` and set `SAATHI_AI_MODEL` to a downloaded model name. For OpenAI, use `https://api.openai.com/v1`, set the ID of a model you can access, and set `SAATHI_AI_API_KEY` in the local `.env`. The server sends recent turns to the configured provider. Keep your key in the server environment.
