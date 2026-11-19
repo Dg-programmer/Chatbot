@@ -22,8 +22,10 @@ For an existing Blueprint, enter `GEMINI_API_KEY` in the service’s **Environme
 ## Connect the browser pet
 
 1. In the hosted BABY app, open **Browser pet** and download `baby-page-pet.zip`. Unzip it to a folder you can keep.
-2. Go to `chrome://extensions` in Chrome or `edge://extensions` in Edge, turn on **Developer mode**, and select **Load unpacked**. Choose the folder containing `manifest.json`. For an existing installation, update the files in the loaded folder and use its **Reload** control on the extensions page.
+2. Go to `brave://extensions` in Brave, `chrome://extensions` in Chrome, or `edge://extensions` in Edge, turn on **Developer mode**, and select **Load unpacked**. Choose the folder containing `manifest.json`. To update an existing installation, replace the files in its loaded folder, use its **Reload** control, and refresh already-open webpages once.
 3. In the hosted BABY app, select **Browser pet → Create connection code**. Open the pet's **Connection settings**, fill in **Hosted BABY URL** and **Pairing code**, and select **Connect**. Allow the pet to access your Render host when the browser asks.
 4. Reload an ordinary webpage, open the floating pet, and ask a question about the page. Try the microphone and **Play reply** where supported by the browser.
+
+In **Extension options**, use **Automatic** visibility when running BABY Desktop. The browser pet stays hidden while the desktop app runs. The browser toolbar icon still opens the webpage chat on demand.
 
 If Render has put the service to sleep, open the hosted app and wait for it to wake. Connection codes are single-use and expire after five minutes. The pet stays paired for 14 days. Generate a new code from the signed-in app when the pet asks you to reconnect.

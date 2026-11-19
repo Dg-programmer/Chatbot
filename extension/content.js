@@ -5,7 +5,12 @@
 
   const context = globalThis.SaathiPageContext;
   const capabilities = globalThis.BabyPetCapabilities;
-  const preferences = Object.freeze({ placement: "babyPetPlacement", theme: "babyPetTheme", speech: "babyPetReadAloud" });
+  const preferences = Object.freeze({
+    placement: "babyPetPlacement", theme: "babyPetTheme",
+    speech: "babyPetReadAloud", visibility: "babyPetVisibility",
+  });
+  const visibilityModes = new Set(["automatic", "browser", "toolbar"]);
+  const presencePollMs = 3200;
   const svgPaths = {
     close: "m6 6 12 12M6 18 18 6",
     page: "M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zm0 0v6h6M8 13h8m-8 4h5",
@@ -46,7 +51,7 @@
     return item;
   }
 
-  const host = element("saathi-page-pet", "", { "data-saathi-pet-root": "" });
+  const host = element("saathi-page-pet", "", { "data-saathi-pet-root": "", hidden: "" });
   const shadow = host.attachShadow({ mode: "closed" });
   const style = new CSSStyleSheet();
   style.replaceSync(globalThis.SaathiPetTheme);
@@ -152,18 +157,20 @@
     "host-permission-required": "Allow the pet to access the hosted BABY in Connection settings.",
     "connection-unavailable": "The extension could not load its connection. Reload the extension and try again.",
     "invalid-attachment": "A file could not be read. Remove it and attach it again.",
-    "unsupported-attachment": "One of the files has an unsupported format.",
+    "unsupported-attachment": "The connected model doesn’t support one of these file formats.",
     "attachment-too-large": "Each attachment must be 8 MB or smaller.",
     "attachments-too-large": "The files must add up to 12 MB or less.",
     "too-many-attachments": "You can include up to three files.",
-    "attachments-unavailable": "Connect BABY to OpenAI to analyze attachments.",
+    "attachments-unavailable": "Connect BABY to a server with file uploads enabled to analyze attachments.",
     "audio-transcription-failed": "The recording could not be transcribed. Try a clearer recording or a different file.",
-    "provider-attachment-rejected": "OpenAI could not read one of the files. Try saving a fresh copy.",
+    "provider-attachment-rejected": "The connected model couldn’t read one of the files. Try saving a fresh copy.",
     "attachment-read": "The browser could not read a file. Attach it again to retry.",
   };
   let pageSession = location.href;
   let history = [];
   let attachments = [];
+  let attachmentExtensions = null;
+  let attachmentsAvailable = true;
   let pending;
   let connectionRevision = 0;
   let activeConnection = { mode: "local", origin: localOrigin };
@@ -383,6 +390,14 @@
     }
     if (connectionRevision !== revision) return;
     rememberConnection(status);
+    if (typeof status?.attachments === "boolean") {
+      const knownExtensions = capabilities.attachmentAccept.split(",");
+      attachmentExtensions = Array.isArray(status.attachmentExtensions)
+        ? new Set(knownExtensions.filter((extension) => status.attachmentExtensions.includes(extension)))
+        : null;
+      attachmentsAvailable = status.attachments && attachmentExtensions?.size !== 0;
+      fileInput.accept = attachmentExtensions ? [...attachmentExtensions].join(",") : capabilities.attachmentAccept;
+    }
     if (status?.connected) setConnection("on", "AI connected");
     else setConnection("off", disconnectedLabel(status?.error));
   }
@@ -392,6 +407,17 @@
     refreshSource();
     const question = raw.trim() || (attachments.length ? "Analyze the attached files. Summarize their key points." : "");
     if (pending || !question) return;
+    if (attachments.length && !attachmentsAvailable) {
+      showError("attachments-unavailable");
+      return;
+    }
+    if (attachmentExtensions) {
+      const unsupported = attachments.find(({ name }) => !attachmentExtensions.has(name.toLowerCase().match(/\.[a-z0-9]+$/u)?.[0]));
+      if (unsupported) {
+        showNotice(`Remove “${unsupported.name}”. The connected model doesn’t support that file format.`);
+        return;
+      }
+    }
     if (question.length > 2000) {
       showError("invalid-question");
       return;
@@ -457,8 +483,7 @@
     renderConversation();
   }
 
-  function togglePanel() {
-    const open = panel.hidden;
+  function setPanelOpen(open, focus = true) {
     panel.hidden = !open;
     pet.setAttribute("aria-expanded", String(open));
     pet.setAttribute("aria-label", open ? "Close BABY Page Pet" : "Open BABY Page Pet");
@@ -469,13 +494,23 @@
       refreshSource();
       renderConversation();
       layout();
-      input.focus({ preventScroll: true });
+      if (focus) input.focus({ preventScroll: true });
       checkConnection();
     } else {
       stopVoice();
-      pet.focus({ preventScroll: true });
+      if (focus) pet.focus({ preventScroll: true });
     }
     scheduleLayout();
+  }
+
+  function togglePanel() {
+    if (panel.hidden) {
+      if (!host.hidden) setPanelOpen(true);
+    } else {
+      manualVisibility = false;
+      setPanelOpen(false, defaultPetVisible());
+      renderPetVisibility();
+    }
   }
 
   const defaultPlacement = { x: 1, y: 1 };
@@ -488,6 +523,60 @@
   let placementChanged = false;
   let themeChanged = false;
   let speechChanged = false;
+  let visibilityLoaded = false;
+  let visibilityMode = "automatic";
+  let desktopRunning = true;
+  let manualVisibility = false;
+  let presenceRevision = 0;
+  let presenceTimer;
+
+  function defaultPetVisible() {
+    return visibilityLoaded && (visibilityMode === "browser" || (visibilityMode === "automatic" && !desktopRunning));
+  }
+
+  function renderPetVisibility() {
+    const visible = manualVisibility || defaultPetVisible();
+    if (host.hidden === !visible) return;
+    if (!visible) {
+      if (drag) {
+        const { pointerId } = drag;
+        endDrag({ pointerId });
+        if (pet.hasPointerCapture?.(pointerId)) pet.releasePointerCapture(pointerId);
+      }
+      if (!panel.hidden) setPanelOpen(false, false);
+      else stopVoice();
+    }
+    host.hidden = !visible;
+    if (visible) scheduleLayout();
+  }
+
+  async function refreshPresence(revision) {
+    let response;
+    try {
+      response = await chrome.runtime.sendMessage({ type: "baby:desktop:presence" });
+    } catch {
+      // The browser pet remains usable when Desktop BABY cannot be reached.
+    }
+    if (revision !== presenceRevision || document.hidden) return;
+    desktopRunning = response?.running === true;
+    renderPetVisibility();
+    presenceTimer = setTimeout(() => refreshPresence(revision), presencePollMs);
+  }
+
+  function restartPresence() {
+    clearTimeout(presenceTimer);
+    const revision = ++presenceRevision;
+    renderPetVisibility();
+    if (visibilityLoaded && visibilityMode === "automatic" && !document.hidden) refreshPresence(revision);
+  }
+
+  function setVisibilityMode(value) {
+    visibilityMode = visibilityModes.has(value) ? value : "automatic";
+    visibilityLoaded = true;
+    manualVisibility = false;
+    desktopRunning = true;
+    restartPresence();
+  }
 
   function validPlacement(value) {
     return value && Number.isFinite(value.x) && Number.isFinite(value.y);
@@ -513,6 +602,7 @@
   }
 
   function layout() {
+    if (host.hidden) return;
     const view = bounds();
     const x = view.minX + view.spanX * clamp(placement.x, 0, 1);
     const y = view.minY + view.spanY * clamp(placement.y, 0, 1);
@@ -636,17 +726,25 @@
   setTheme(colorPreference.matches);
   renderVoice();
   scheduleLayout();
-  chrome.storage?.local?.get(Object.values(preferences))?.then((saved) => {
+  chrome.storage.local.get(Object.values(preferences)).then((saved) => {
     if (!placementChanged && validPlacement(saved[preferences.placement])) {
       placement = saved[preferences.placement];
     }
     if (!themeChanged && typeof saved[preferences.theme] === "boolean") setTheme(saved[preferences.theme]);
     if (!speechChanged) readAloud = saved[preferences.speech] === true;
+    if (!visibilityLoaded) setVisibilityMode(saved[preferences.visibility]);
     renderVoice();
     scheduleLayout();
-  }).catch(() => {});
+  }).catch(() => { if (!visibilityLoaded) setVisibilityMode("automatic"); });
+  document.addEventListener("visibilitychange", restartPresence);
+  window.addEventListener("pagehide", () => {
+    clearTimeout(presenceTimer);
+    presenceRevision += 1;
+  });
+  window.addEventListener("pageshow", (event) => { if (event.persisted) restartPresence(); });
   chrome.storage?.onChanged?.addListener((changes, area) => {
     if (area !== "local") return;
+    if (preferences.visibility in changes) setVisibilityMode(changes[preferences.visibility].newValue);
     const position = changes[preferences.placement]?.newValue;
     if (!drag && validPlacement(position)) {
       placement = position;
@@ -702,12 +800,22 @@
   });
   attachmentButton.addEventListener("click", () => {
     resetForNewPage();
-    fileInput.click();
+    if (attachmentsAvailable) fileInput.click();
+    else {
+      showError("attachments-unavailable");
+      checkConnection();
+    }
   });
   fileInput.addEventListener("change", () => {
     resetForNewPage();
-    const selected = capabilities.validateFiles(fileInput.files, attachments);
+    const selection = Array.from(fileInput.files);
     fileInput.value = "";
+    if (panel.hidden || pending) return;
+    if (!attachmentsAvailable) {
+      showError("attachments-unavailable");
+      return;
+    }
+    const selected = capabilities.validateFiles(selection, attachments, attachmentExtensions);
     attachments = [...attachments, ...selected.accepted];
     renderAttachments();
     if (selected.errors.length) showNotice(selected.errors.join(" "));
@@ -740,7 +848,11 @@
   });
   chrome.runtime.onMessage.addListener((message, sender, respond) => {
     if (sender.id !== chrome.runtime.id || message?.type !== "saathi:toggle") return;
-    togglePanel();
+    if (panel.hidden) {
+      manualVisibility = true;
+      renderPetVisibility();
+      setPanelOpen(true);
+    } else togglePanel();
     respond({ toggled: true });
   });
 })();

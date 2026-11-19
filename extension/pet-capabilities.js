@@ -274,7 +274,7 @@
 
   let lastId = 0;
 
-  function validateFiles(files, existing = []) {
+  function validateFiles(files, existing = [], allowedExtensions = null) {
     const accepted = [];
     const errors = [];
     let total = existing.reduce((bytes, item) => bytes + item.size, 0);
@@ -295,6 +295,10 @@
       const suppliedType = file.type?.split(";")[0].trim().toLowerCase();
       if (!types || (suppliedType && suppliedType !== "application/octet-stream" && !types.includes(suppliedType))) {
         errors.push(`“${name}” has an unsupported file type.`);
+        continue;
+      }
+      if (allowedExtensions && !allowedExtensions.has("." + extension)) {
+        errors.push(`“${name}” is not supported by the connected model. Its accepted formats are ${[...allowedExtensions].join(", ")}.`);
         continue;
       }
       if (!Number.isSafeInteger(file.size) || file.size <= 0) {

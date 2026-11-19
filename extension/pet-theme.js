@@ -8,6 +8,7 @@ globalThis.SaathiPetTheme = `
   font-size: 14px; line-height: 1.36;
 }
 :host([data-placed]) { left: var(--dock-x); top: var(--dock-y); right: auto; bottom: auto; }
+:host([hidden]) { display: none !important; }
 :host([data-theme="dark"]) { color-scheme: dark; color: #e7f1ff; }
 *, *::before, *::after { box-sizing: border-box; }
 [hidden] { display: none !important; }

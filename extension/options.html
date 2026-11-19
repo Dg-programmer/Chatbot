@@ -12,6 +12,17 @@
     <main>
       <img src="./icon-128.png" alt="" width="64" height="64">
       <h1>BABY connection</h1>
+      <section aria-labelledby="visibility-heading">
+        <h2 id="visibility-heading">Floating pet</h2>
+        <label for="visibility">Show browser pet</label>
+        <select id="visibility" aria-describedby="visibility-note" disabled>
+          <option value="automatic">Automatic</option>
+          <option value="browser">Always on webpages</option>
+          <option value="toolbar">Only from the browser toolbar</option>
+        </select>
+        <p class="note" id="visibility-note">Automatic hides the browser pet while Desktop BABY is running. Click the BABY toolbar icon to temporarily open the browser pet on a page.</p>
+        <p id="visibility-status" role="status" hidden></p>
+      </section>
       <section aria-labelledby="active-heading">
         <h2 id="active-heading">Current connection</h2>
         <p id="status" role="status">Checking connection…</p>

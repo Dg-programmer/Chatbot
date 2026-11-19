@@ -2,13 +2,70 @@ import { hostedOrigin, localOrigin, pairingCodePattern } from "./connection-orig
 import { readConnection, saveConnection } from "./connection-store.js";
 
 const toggle = "saathi:toggle";
+const presenceUrl = "http://127.0.0.1:43179/baby-presence";
+const presenceCacheMs = 2200;
 const maxTextBytes = 120 * 1024;
 const maxFileBytes = 8 * 1024 * 1024;
 const maxAttachmentBytes = 12 * 1024 * 1024;
+let cachedPresence;
+let presenceExpires = 0;
+let pendingPresence;
 
 function isPage(sender) {
   return sender.id === chrome.runtime.id && Number.isInteger(sender.tab?.id) && sender.frameId === 0
     && typeof sender.url === "string" && /^https?:\/\//u.test(sender.url);
+}
+
+async function probeDesktopPresence() {
+  try {
+    const response = await fetch(presenceUrl, {
+      method: "POST",
+      mode: "cors",
+      credentials: "omit",
+      redirect: "error",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+      signal: AbortSignal.timeout(1100),
+    });
+    const type = response.headers.get("Content-Type")?.split(";", 1)[0].trim().toLowerCase();
+    if (!response.ok || type !== "application/json" || !response.body) return false;
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let bytes = 0;
+    let text = "";
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        bytes += value.byteLength;
+        if (bytes > 256) {
+          await reader.cancel();
+          return false;
+        }
+        text += decoder.decode(value, { stream: true });
+      }
+      const status = JSON.parse(text + decoder.decode());
+      return status?.service === "baby-desktop" && status.running === true;
+    } finally {
+      reader.releaseLock();
+    }
+  } catch {
+    return false;
+  }
+}
+
+function desktopPresence() {
+  // Multiple visible browser windows can share a probe without waking Desktop BABY.
+  if (performance.now() < presenceExpires) return Promise.resolve(cachedPresence);
+  if (!pendingPresence) {
+    pendingPresence = probeDesktopPresence().then((running) => {
+      cachedPresence = { running };
+      presenceExpires = performance.now() + presenceCacheMs;
+      return cachedPresence;
+    }).finally(() => { pendingPresence = undefined; });
+  }
+  return pendingPresence;
 }
 
 function sanitizeAttachments(files) {
@@ -101,7 +158,10 @@ async function petRequest(path, body, milliseconds) {
   const data = await request(origin, path, body, milliseconds, token);
   if (typeof data.error === "string") return { ...connection, error: data.error };
   if (path.endsWith("/status")) {
-    return { ...connection, connected: data.connected === true, attachments: data.attachments === true };
+    const attachmentExtensions = Array.isArray(data.attachmentExtensions)
+      ? data.attachmentExtensions.filter((extension) => typeof extension === "string" && /^\.[a-z0-9]{1,8}$/u.test(extension)).slice(0, 32)
+      : null;
+    return { ...connection, connected: data.connected === true, attachments: data.attachments === true, attachmentExtensions };
   }
   if (typeof data.reply === "string" && data.reply.trim()) return { ...connection, reply: data.reply.slice(0, 12000) };
   return { ...connection, error: "analysis-failed" };
@@ -154,6 +214,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return;
   }
   if (!isPage(sender)) return;
+  if (type === "baby:desktop:presence") return sendResult(desktopPresence(), sendResponse);
   if (type === "baby:connection:open") {
     chrome.runtime.openOptionsPage().catch(() => {});
     return;

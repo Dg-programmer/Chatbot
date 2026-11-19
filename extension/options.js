@@ -4,6 +4,10 @@ const get = (id) => document.getElementById(id);
 const [status, open, check, local, pair, originInput, codeInput, connect, feedback] = [
   "status", "open", "check", "local", "pair", "origin", "code", "connect", "feedback",
 ].map(get);
+const visibility = get("visibility");
+const visibilityStatus = get("visibility-status");
+const visibilityKey = "babyPetVisibility";
+const visibilityModes = new Set(["automatic", "browser", "toolbar"]);
 const errors = {
   "invalid-host": "Enter the HTTPS address of your hosted BABY without a page path.",
   "invalid-pairing-code": "Copy the complete pairing code from your signed-in BABY.",
@@ -15,6 +19,42 @@ const errors = {
   "origin-forbidden": "This BABY server doesn’t recognize the extension. Check that both are up to date.",
 };
 let revision = 0;
+
+function renderVisibility(value) {
+  visibility.value = visibilityModes.has(value) ? value : "automatic";
+}
+
+chrome.storage.local.get(visibilityKey).then((saved) => {
+  renderVisibility(saved[visibilityKey]);
+  visibility.disabled = false;
+}).catch(() => {
+  visibilityStatus.hidden = false;
+  visibilityStatus.textContent = "Could not load the pet’s visibility setting.";
+});
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && visibilityKey in changes) renderVisibility(changes[visibilityKey].newValue);
+});
+
+visibility.addEventListener("change", async () => {
+  if (!visibilityModes.has(visibility.value)) return;
+  visibility.disabled = true;
+  visibilityStatus.hidden = true;
+  try {
+    await chrome.storage.local.set({ [visibilityKey]: visibility.value });
+  } catch {
+    visibilityStatus.hidden = false;
+    visibilityStatus.textContent = "Could not save the pet’s visibility setting. Try again.";
+    try {
+      const saved = await chrome.storage.local.get(visibilityKey);
+      renderVisibility(saved[visibilityKey]);
+    } catch {
+      // Keep the error visible if storage is unavailable.
+    }
+  } finally {
+    visibility.disabled = false;
+  }
+});
 
 function describe(result) {
   const name = result.mode === "hosted" ? `Hosted BABY (${new URL(result.origin).hostname})` : "Local BABY";
