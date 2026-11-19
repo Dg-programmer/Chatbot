@@ -106,6 +106,9 @@ export const locales = {
     "cancelEdit": "Cancel editing",
     "clearDraft": "Clear draft",
     "attach": "Attach files",
-    "attachmentsUnavailable": "File analysis requires the updated local BABY server with OpenAI connected."
+    "attachmentsUnavailable": "Connect to a BABY server with file uploads enabled to analyze attachments.",
+    "attachmentsDisconnected": "Connect to BABY before attaching files.",
+    "attachmentsChecking": "Checking whether this connection supports file uploads…",
+    "attachmentsReady": "File uploads are ready. Select Attach files again."
   }
 };

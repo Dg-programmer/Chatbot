@@ -5,6 +5,7 @@ import { createServer } from "node:http";
 import { extname, isAbsolute, relative, resolve, sep } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
+import { geminiAttachmentExtensions, geminiMediaBody, geminiMediaEndpoint, geminiReplyText } from "./gemini-media.mjs";
 import { createHostedAuth, HostedAuthError } from "./hosted-auth.mjs";
 import { createLocalKeySetup } from "./local-key-setup.mjs";
 import { maxAttachments, maxTotalAttachmentBytes, MediaError, openAIErrorCode, openAIInput, readAttachment } from "./openai-media.mjs";
@@ -49,8 +50,7 @@ const pageAnalysisInstructions = [
   "You cannot visit links, inspect the live website or private browser fields, verify live information, or act on the website or device.",
 ].join(" ");
 const handlePageAnalysis = createPageAnalysis({
-  isConnected: () => Boolean(provider),
-  supportsAttachments: () => provider?.attachments === true,
+  providerStatus,
   answer: answerPage,
   sendJSON,
   publicErrorCode,
@@ -89,7 +89,20 @@ function publicErrorCode(error) {
 }
 
 function openAIProvider(model, key) {
-  return { url: new URL("https://api.openai.com/v1/responses"), model, key, attachments: true };
+  return { url: new URL("https://api.openai.com/v1/responses"), model, key, kind: "openai", attachments: true };
+}
+
+function geminiProvider(model, key) {
+  const mediaUrl = key ? geminiMediaEndpoint(model) : null;
+  return { url: new URL(geminiChatEndpoint), model, key, kind: "gemini", mediaUrl, attachments: Boolean(mediaUrl) };
+}
+
+function providerStatus() {
+  return {
+    connected: Boolean(provider),
+    attachments: provider?.attachments === true,
+    ...(provider?.mediaUrl ? { attachmentExtensions: geminiAttachmentExtensions } : {}),
+  };
 }
 
 function configureProvider() {
@@ -98,7 +111,7 @@ function configureProvider() {
 
   if (process.env.SAATHI_AI_PROVIDER === "gemini") {
     const key = process.env.GEMINI_API_KEY?.trim();
-    return key ? { url: new URL(geminiChatEndpoint), model, key } : null;
+    return key ? geminiProvider(model, key) : null;
   }
 
   const base = new URL(process.env.SAATHI_AI_BASE_URL?.trim() || "https://api.openai.com/v1");
@@ -116,6 +129,7 @@ function configureProvider() {
   }
 
   base.pathname = `${base.pathname.replace(/\/+$/, "")}/chat/completions`;
+  if (base.href === geminiChatEndpoint) return geminiProvider(model, key);
   return { url: base, model, key };
 }
 
@@ -180,26 +194,28 @@ async function readChatRequest(request, allowsAttachments) {
   return history;
 }
 
-async function* decodeBody(body) {
+async function* decodeBody(body, limit = maxProviderBytes) {
   const decoder = new TextDecoder("utf-8", { fatal: true });
   let size = 0;
   for await (const bytes of body) {
     size += bytes.byteLength;
-    if (size > maxProviderBytes) throw new Error("Provider response is too large.");
+    if (size > limit) throw new Error("Provider response is too large.");
     yield decoder.decode(bytes, { stream: true });
   }
   yield decoder.decode();
 }
 
-async function* readProviderReply(response, openAI) {
+async function* readProviderReply(response, format) {
   if (!response.body) throw new Error("Provider response has no body.");
+  const openAI = format === "openai";
+  const gemini = format === "gemini-media";
   if (!response.headers.get("content-type")?.toLowerCase().includes("text/event-stream")) {
     let json = "";
     for await (const text of decodeBody(response.body)) json += text;
     const payload = JSON.parse(json);
     const reply = openAI
       ? payload.output?.flatMap((item) => item.content ?? []).map((part) => part.text ?? part.refusal ?? "").join("")
-      : payload.choices?.[0]?.message?.content;
+      : gemini ? geminiReplyText(payload) : payload.choices?.[0]?.message?.content;
     if (typeof reply === "string" && reply.trim()) yield reply;
     return;
   }
@@ -225,7 +241,7 @@ async function* readProviderReply(response, openAI) {
         }
         const reply = openAI
           ? (["response.output_text.delta", "response.refusal.delta"].includes(chunk.type) ? chunk.delta : undefined)
-          : chunk.choices?.[0]?.delta?.content;
+          : gemini ? geminiReplyText(chunk) : chunk.choices?.[0]?.delta?.content;
         if (typeof reply === "string" && reply) yield reply;
       }
       lineBreak = pending.indexOf("\n");
@@ -234,42 +250,61 @@ async function* readProviderReply(response, openAI) {
   if (openAI) throw new Error("Provider stream ended before completion.");
 }
 
+async function providerErrorCode(result, kind) {
+  if (kind === "gemini" && result.status === 400 && result.body) {
+    try {
+      let json = "";
+      for await (const text of decodeBody(result.body, 16 * 1024)) json += text;
+      const { error } = JSON.parse(json);
+      if (error?.details?.some((detail) => detail.reason === "API_KEY_INVALID")) return "provider-auth";
+    } catch {
+      // Provider response bodies are optional and never returned to clients.
+    }
+  } else {
+    await result.body?.cancel();
+  }
+  if (kind === "gemini" && result.status === 402) return "provider-rate-limited";
+  return kind ? openAIErrorCode(result.status) : "provider-rejected";
+}
+
 async function* providerReply(selected, messages, instructions, maxOutputTokens, signal) {
+  const hasAttachments = messages.some(({ attachments }) => attachments.length);
+  const geminiMedia = selected.mediaUrl && hasAttachments;
+  const openAI = selected.kind === "openai";
   const headers = { "Content-Type": "application/json", Accept: "text/event-stream, application/json" };
-  if (selected.key) headers.Authorization = `Bearer ${selected.key}`;
-  const body = selected.attachments ? {
-    model: selected.model,
-    instructions,
-    input: await openAIInput(messages, selected.key, signal),
-    stream: true,
-    store: false,
-    max_output_tokens: maxOutputTokens,
-    ...(selected.model === "gpt-6-luna" ? { reasoning: { effort: "low" } } : {}),
-  } : {
-    model: selected.model,
-    messages: [
-      { role: "system", content: instructions },
-      ...messages.map(({ role, text }) => ({ role, content: text })),
-    ],
-    stream: true,
-  };
-  const result = await fetch(selected.url, {
+  if (geminiMedia) headers["x-goog-api-key"] = selected.key;
+  else if (selected.key) headers.Authorization = `Bearer ${selected.key}`;
+  const body = geminiMedia
+    ? geminiMediaBody(messages, instructions, maxOutputTokens)
+    : JSON.stringify(openAI ? {
+      model: selected.model,
+      instructions,
+      input: await openAIInput(messages, selected.key, signal),
+      stream: true,
+      store: false,
+      max_output_tokens: maxOutputTokens,
+      ...(selected.model === "gpt-6-luna" ? { reasoning: { effort: "low" } } : {}),
+    } : {
+      model: selected.model,
+      messages: [
+        { role: "system", content: instructions },
+        ...messages.map(({ role, text }) => ({ role, content: text })),
+      ],
+      stream: true,
+    });
+  const result = await fetch(geminiMedia ? selected.mediaUrl : selected.url, {
     method: "POST",
     headers,
     redirect: "error",
     signal,
-    body: JSON.stringify(body),
+    body,
   });
   if (!result.ok) {
-    await result.body?.cancel();
-    const received = selected.attachments || selected.url.href === geminiChatEndpoint
-      ? openAIErrorCode(result.status)
-      : "provider-rejected";
-    const isFileRejection = received === "provider-rejected"
-      && [400, 413, 415, 422].includes(result.status) && messages.some(({ attachments }) => attachments.length);
+    const received = await providerErrorCode(result, selected.kind);
+    const isFileRejection = hasAttachments && received === "provider-rejected" && [400, 413, 415, 422].includes(result.status);
     throw new RequestError(received === "provider-rate-limited" ? 429 : 502, isFileRejection ? "provider-attachment-rejected" : received);
   }
-  yield* readProviderReply(result, selected.attachments);
+  yield* readProviderReply(result, geminiMedia ? "gemini-media" : selected.kind);
 }
 
 async function streamReply(request, response) {
@@ -377,8 +412,7 @@ const server = createServer({ requestTimeout: 30000, headersTimeout: 10000 }, as
     if (pathname === "/api/status") {
       if (request.method !== "GET") throw new RequestError(405, "method-not-allowed");
       sendJSON(response, 200, {
-        connected: Boolean(provider),
-        attachments: provider?.attachments === true,
+        ...providerStatus(),
         ...(hostedAuth ? { hosted: true } : {}),
       });
     } else if (pathname === "/api/chat") {

@@ -102,7 +102,7 @@ async function readAnalysisRequest(request, supportsAttachments) {
   return { question, page, history, attachments };
 }
 
-export function createPageAnalysis({ isConnected, supportsAttachments, answer, sendJSON, publicErrorCode, requirePet }) {
+export function createPageAnalysis({ providerStatus, answer, sendJSON, publicErrorCode, requirePet }) {
   let inFlight = 0;
   let recentStarts = [];
 
@@ -116,14 +116,15 @@ export function createPageAnalysis({ isConnected, supportsAttachments, answer, s
       throw new PageAnalysisError(405, "method-not-allowed");
     }
     requirePet?.(request);
+    const { connected, attachments: supportsAttachments, attachmentExtensions } = providerStatus();
     if (status) {
       if (Number(request.headers["content-length"]) > 1024 || request.headers["transfer-encoding"]) {
         throw new PageAnalysisError(413, "message-too-large");
       }
-      sendJSON(response, 200, { connected: isConnected(), attachments: supportsAttachments() });
+      sendJSON(response, 200, { connected, attachments: supportsAttachments, attachmentExtensions });
       return true;
     }
-    if (!isConnected()) throw new PageAnalysisError(503, "provider-unconfigured");
+    if (!connected) throw new PageAnalysisError(503, "provider-unconfigured");
 
     const now = Date.now();
     recentStarts = recentStarts.filter((start) => now - start < 60000);
@@ -133,7 +134,7 @@ export function createPageAnalysis({ isConnected, supportsAttachments, answer, s
     inFlight++;
 
     try {
-      const input = await readAnalysisRequest(request, supportsAttachments());
+      const input = await readAnalysisRequest(request, supportsAttachments);
       if (response.destroyed) return true;
       const started = Date.now();
       recentStarts = recentStarts.filter((start) => started - start < 60000);

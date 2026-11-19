@@ -69,7 +69,11 @@ let recording = null;
 let job = null;
 let engineConnected = false;
 let attachmentsEnabled = false;
+let attachmentExtensions = null;
+let attachmentPicker = null;
 let hostedMode = false;
+let statusRequest = null;
+let statusCheckedAt = 0;
 let pairingTimer;
 let dialogChatId = null;
 let noticeTimer;
@@ -96,6 +100,7 @@ const activeFiles = () => chatFiles.get(currentId) ?? [];
 const canReadAloud = (message) => message.role === "assistant" && (!message.language || message.language === "en");
 const makeId = () => globalThis.crypto?.randomUUID?.() ?? Date.now().toString(36) + Math.random().toString(36).slice(2);
 const speedFormat = new Intl.NumberFormat("en", { minimumFractionDigits: 2 });
+const knownAttachmentExtensions = new Set(attachmentAccept.split(","));
 
 function node(tag, className, value) {
   const element = document.createElement(tag);
@@ -226,6 +231,61 @@ function renderHostedControls() {
   if (hostedMode) $("pairing-origin").value = location.origin;
 }
 
+function applyConnectionStatus(status) {
+  engineConnected = status?.connected === true;
+  hostedMode = status?.hosted === true;
+  attachmentExtensions = Array.isArray(status?.attachmentExtensions)
+    ? new Set(status.attachmentExtensions.filter((extension) => knownAttachmentExtensions.has(extension)))
+    : null;
+  attachmentsEnabled = engineConnected && status?.attachments === true && attachmentExtensions?.size !== 0;
+  $("file-input").accept = attachmentExtensions?.size ? [...attachmentExtensions].join(",") : attachmentAccept;
+  renderEngine();
+  renderHostedControls();
+}
+
+function refreshConnectionStatus({ replace = false } = {}) {
+  if (location.protocol === "file:") return Promise.resolve();
+  if (statusRequest && !replace) return statusRequest.promise;
+  statusRequest?.controller.abort();
+  const request = { controller: new AbortController() };
+  statusRequest = request;
+  request.promise = (async () => {
+    try {
+      const response = await fetch("./api/status", {
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+        signal: request.controller.signal,
+      });
+      const status = response.ok && response.headers.get("content-type")?.includes("application/json")
+        ? await response.json()
+        : null;
+      if (statusRequest === request) applyConnectionStatus(status);
+    } catch {
+      if (statusRequest === request) applyConnectionStatus(null);
+    } finally {
+      if (statusRequest === request) {
+        statusCheckedAt = Date.now();
+        statusRequest = null;
+      }
+    }
+  })();
+  return request.promise;
+}
+
+function unavailableAttachmentsNotice() {
+  return !engineConnected && location.protocol !== "file:" ? t().attachmentsDisconnected : t().attachmentsUnavailable;
+}
+
+function attachmentProblem(files) {
+  if (!files.length) return "";
+  if (!attachmentsEnabled) return unavailableAttachmentsNotice();
+  const unsupported = attachmentExtensions && files.find(({ name }) => {
+    const extension = name.toLowerCase().match(/\.[a-z0-9]+$/u)?.[0];
+    return !attachmentExtensions.has(extension);
+  });
+  return unsupported ? `Remove “${unsupported.name}”. This connection doesn’t support that file format.` : "";
+}
+
 async function createPairingCode() {
   const button = $("pairing-generate");
   const status = $("pairing-message");
@@ -327,6 +387,7 @@ function renderStatus() {
 
 function updateSend() {
   const send = $("send");
+  $("attach").disabled = Boolean(job);
   if (job) {
     send.type = "button";
     send.disabled = false;
@@ -477,6 +538,7 @@ function abortRecording() {
 
 function openChat(id) {
   abortRecording();
+  attachmentPicker = null;
   stopJob();
   voice.stopSpeaking();
   drafts.set(currentId, $("draft").value);
@@ -550,6 +612,11 @@ function submitMessage(raw) {
   const addingFiles = hasNewFiles();
   const text = prompt || (addingFiles ? "Summarize and analyze the attached files." : "");
   if (!text || job) return;
+  const problem = attachmentProblem(files);
+  if (problem) {
+    showNotice(problem);
+    return;
+  }
   hideNotice();
   abortRecording();
   voice.stopSpeaking();
@@ -606,8 +673,9 @@ async function generateReply(chat, replacing = null) {
     showNotice("Attach the files again to retry this reply.");
     return;
   }
-  if (files.length && !attachmentsEnabled) {
-    showNotice(t().attachmentsUnavailable);
+  const problem = attachmentProblem(files);
+  if (problem) {
+    showNotice(problem);
     return;
   }
   const request = { chatId: chat.id, controller: new AbortController(), partial: "", replacing };
@@ -683,20 +751,26 @@ async function generateReply(chat, replacing = null) {
     if (error.message === "provider-unconfigured") {
       engineConnected = false;
       attachmentsEnabled = false;
+      statusCheckedAt = 0;
       renderEngine();
       showNotice(t().modelNeedsKey);
     } else {
+      if (error.message === "attachments-unavailable") {
+        attachmentsEnabled = false;
+        statusCheckedAt = 0;
+      }
       const message = {
         "provider-auth": t().modelKeyError,
         "provider-rate-limited": t().modelLimitError,
         "attachments-unavailable": t().attachmentsUnavailable,
         "invalid-attachment": "One of the files could not be read. Remove it and attach it again.",
-        "unsupported-attachment": "One of the files has an unsupported format.",
+        "unsupported-attachment": "The connected model doesn’t support one of these file formats. Remove that file and try again.",
         "attachment-too-large": "Each attachment must be 8 MB or smaller.",
         "attachments-too-large": "The files must add up to 12 MB or less.",
         "too-many-attachments": "You can include up to three files in a chat.",
         "audio-transcription-failed": "I couldn’t transcribe the audio. Try a clear recording in a supported format.",
-        "provider-attachment-rejected": "OpenAI couldn’t read one of the files. Try reopening it and saving a fresh copy.",
+        "provider-attachment-rejected": "The connected model couldn’t read one of the files. Try reopening it and saving a fresh copy.",
+        "message-too-large": "This request is too large. Try smaller attachments or a shorter message.",
         "file-read-failed": "The browser couldn’t read one of the files. Attach it again to retry.",
       }[error.message];
       showNotice(message ?? t().responseError);
@@ -823,16 +897,41 @@ $("notice-close").addEventListener("click", hideNotice);
 $("mic").addEventListener("click", toggleMicrophone);
 $("large-mic").addEventListener("click", toggleMicrophone);
 $("replay-last").addEventListener("click", () => play(activeChat()?.messages.findLast(canReadAloud)));
-$("file-input").accept = attachmentAccept;
+const fileInput = $("file-input");
+fileInput.accept = attachmentAccept;
 $("attach").addEventListener("click", () => {
-  if (attachmentsEnabled) $("file-input").click();
-  else showNotice(t().attachmentsUnavailable);
+  if (job || document.documentElement.dataset.desktopVisible === "false") return;
+  const intent = { chatId: currentId };
+  if (attachmentsEnabled) {
+    attachmentPicker = intent;
+    fileInput.click();
+    return;
+  }
+  if (location.protocol === "file:" || (!statusRequest && Date.now() - statusCheckedAt < 5000)) {
+    showNotice(unavailableAttachmentsNotice());
+    return;
+  }
+  attachmentPicker = intent;
+  showNotice(t().attachmentsChecking);
+  void refreshConnectionStatus().then(() => {
+    if (attachmentPicker !== intent || currentId !== intent.chatId || job) return;
+    attachmentPicker = null;
+    showNotice(attachmentsEnabled ? t().attachmentsReady : unavailableAttachmentsNotice());
+  });
 });
-$("file-input").addEventListener("change", () => {
-  const input = $("file-input");
+fileInput.addEventListener("cancel", () => { attachmentPicker = null; });
+fileInput.addEventListener("change", () => {
+  const selection = Array.from(fileInput.files);
+  fileInput.value = "";
+  const intent = attachmentPicker;
+  attachmentPicker = null;
+  if (!intent || intent.chatId !== currentId || job || document.documentElement.dataset.desktopVisible === "false") return;
+  if (!attachmentsEnabled) {
+    showNotice(unavailableAttachmentsNotice());
+    return;
+  }
   const files = activeFiles();
-  const { accepted, errors } = validateFiles(input.files, files);
-  input.value = "";
+  const { accepted, errors } = validateFiles(selection, files, attachmentExtensions);
   if (accepted.length) {
     chatFiles.set(currentId, [...files, ...accepted]);
     renderAttachments();
@@ -950,15 +1049,4 @@ window.addEventListener("pagehide", (event) => {
   if (!event.persisted) unmountAvatar();
 });
 
-if (location.protocol !== "file:") {
-  fetch("./api/status", { headers: { Accept: "application/json" } })
-    .then((response) => response.ok && response.headers.get("content-type")?.includes("application/json") ? response.json() : null)
-    .then((status) => {
-      engineConnected = status?.connected === true;
-      attachmentsEnabled = engineConnected && status?.attachments === true;
-      hostedMode = status?.hosted === true;
-      renderEngine();
-      renderHostedControls();
-    })
-    .catch(() => {});
-}
+if (location.protocol !== "file:") refreshConnectionStatus();
