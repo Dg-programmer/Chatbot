@@ -1,14 +1,9 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
-export const extensionOrigin = "chrome-extension://iifpllgdmoiajomkfibnaphhlechahja";
-
 const cookieName = "__Host-baby_session";
 const browserSessionSeconds = 7 * 24 * 60 * 60;
-const petSessionSeconds = 14 * 24 * 60 * 60;
-const pairingSeconds = 5 * 60;
 const bodyLimit = 6 * 1024;
-const pairingPattern = /^BABY-[A-Za-z0-9_-]{20}$/u;
-const ticketPattern = /^v1\.(web|pet)\.([0-9]{1,12})\.([A-Za-z0-9_-]{22})\.([A-Za-z0-9_-]{43})$/u;
+const ticketPattern = /^v1\.web\.([0-9]{1,12})\.[A-Za-z0-9_-]{22}\.([A-Za-z0-9_-]{43})$/u;
 const csp = "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
 
 export class HostedAuthError extends Error {
@@ -18,32 +13,9 @@ export class HostedAuthError extends Error {
   }
 }
 
-export function extensionCors(request, response, methods, { authorization = false, privateNetwork = false } = {}) {
-  response.setHeader("Vary", "Origin, Access-Control-Request-Method, Access-Control-Request-Headers, Access-Control-Request-Private-Network");
-  if (request.headers.origin !== extensionOrigin) throw new HostedAuthError(403, "origin-forbidden");
-  response.setHeader("Access-Control-Allow-Origin", extensionOrigin);
-  if (request.method !== "OPTIONS") return false;
-
-  const accepted = authorization ? ["content-type", "authorization"] : ["content-type"];
-  const requested = request.headers["access-control-request-headers"]?.split(",")
-    .map((name) => name.trim().toLowerCase()) ?? [];
-  if (!methods.includes(request.headers["access-control-request-method"])
-    || requested.some((name) => !accepted.includes(name))) {
-    throw new HostedAuthError(403, "origin-forbidden");
-  }
-  response.setHeader("Access-Control-Allow-Methods", methods.join(", "));
-  response.setHeader("Access-Control-Allow-Headers", authorization ? "Content-Type, Authorization" : "Content-Type");
-  if (privateNetwork && request.headers["access-control-request-private-network"] === "true") {
-    response.setHeader("Access-Control-Allow-Private-Network", "true");
-  }
-  response.writeHead(204);
-  response.end();
-  return true;
-}
-
-function requireMethod(request, response, allowed, extension = false) {
+function requireMethod(request, response, allowed) {
   if (allowed.includes(request.method)) return;
-  response.setHeader("Allow", [...allowed, ...(extension ? ["OPTIONS"] : [])].join(", "));
+  response.setHeader("Allow", allowed.join(", "));
   throw new HostedAuthError(405, "method-not-allowed");
 }
 
@@ -65,17 +37,6 @@ async function bodyText(request, mime, errorCode) {
     return new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks));
   } catch {
     throw new HostedAuthError(400, "invalid-body");
-  }
-}
-
-async function readJSON(request) {
-  const body = await bodyText(request, "application/json", "json-required");
-  try {
-    const parsed = JSON.parse(body);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error();
-    return parsed;
-  } catch {
-    throw new HostedAuthError(400, "invalid-json");
   }
 }
 
@@ -167,7 +128,7 @@ function readOrigin(value) {
   return url;
 }
 
-export function createHostedAuth(env, sendJSON) {
+export function createHostedAuth(env) {
   const override = env.BABY_PUBLIC_ORIGIN?.trim();
   if (env.RENDER !== "true" && !override) return null;
 
@@ -184,21 +145,18 @@ export function createHostedAuth(env, sendJSON) {
   const signingKey = createHmac("sha256", secret).update("BABY hosted session v1\0")
     .update(url.origin).update("\0").update(password).digest();
   const signature = (value) => createHmac("sha256", signingKey).update(value).digest("base64url");
-  const pairingCodes = new Map();
   const limitLogin = limitCalls(12, 60, "signin-rate-limited");
-  const limitPairCodes = limitCalls(8, 60, "pairing-rate-limited");
-  const limitRedemption = limitCalls(16, 60, "pairing-rate-limited");
 
-  function mint(scope, expiresIn) {
-    const value = ["v1", scope, Math.floor(Date.now() / 1000) + expiresIn, randomBytes(16).toString("base64url")].join(".");
+  function mint() {
+    const value = ["v1", "web", Math.floor(Date.now() / 1000) + browserSessionSeconds, randomBytes(16).toString("base64url")].join(".");
     return value + "." + signature(value);
   }
 
-  function validToken(token, scope) {
+  function validToken(token) {
     const parts = ticketPattern.exec(token);
-    if (!parts || parts[1] !== scope || Number(parts[2]) <= Math.floor(Date.now() / 1000)) return false;
-    const value = parts[0].slice(0, -(parts[4].length + 1));
-    return timingSafeEqual(Buffer.from(parts[4]), Buffer.from(signature(value)));
+    if (!parts || Number(parts[1]) <= Math.floor(Date.now() / 1000)) return false;
+    const value = token.slice(0, -(parts[2].length + 1));
+    return timingSafeEqual(Buffer.from(parts[2]), Buffer.from(signature(value)));
   }
 
   function assertSameOrigin(request) {
@@ -208,7 +166,7 @@ export function createHostedAuth(env, sendJSON) {
   }
 
   function requireOwner(pathname, request, response) {
-    if (validToken(cookieToken(request), "web")) return false;
+    if (validToken(cookieToken(request))) return false;
     if (pathname.startsWith("/api/") || !["GET", "HEAD"].includes(request.method)) {
       throw new HostedAuthError(401, "signin-required");
     }
@@ -216,17 +174,11 @@ export function createHostedAuth(env, sendJSON) {
     return true;
   }
 
-  function requirePet(request) {
-    const authorization = request.headers.authorization ?? "";
-    const bearer = /^Bearer ([\w.-]+)$/iu.exec(authorization)?.[1] ?? "";
-    if (!validToken(bearer, "pet")) throw new HostedAuthError(401, "extension-auth-required");
-  }
-
   async function handle(pathname, request, response) {
     if (pathname === "/login") {
       requireMethod(request, response, ["GET", "POST"]);
       if (request.method === "GET") {
-        if (validToken(cookieToken(request), "web")) redirect(response, "/");
+        if (validToken(cookieToken(request))) redirect(response, "/");
         else renderLogin(response);
         return true;
       }
@@ -247,7 +199,7 @@ export function createHostedAuth(env, sendJSON) {
         renderLogin(response, "That password didn’t match. Try again.", 401);
         return true;
       }
-      redirect(response, "/", cookie(mint("web", browserSessionSeconds), browserSessionSeconds));
+      redirect(response, "/", cookie(mint(), browserSessionSeconds));
       return true;
     }
 
@@ -258,40 +210,8 @@ export function createHostedAuth(env, sendJSON) {
       return true;
     }
 
-    if (pathname === "/api/pet/pair-code") {
-      requireMethod(request, response, ["POST"]);
-      assertSameOrigin(request);
-      requireOwner(pathname, request, response);
-      limitPairCodes();
-      await readJSON(request);
-      const now = Date.now();
-      for (const [code, expiration] of pairingCodes) {
-        if (expiration <= now) pairingCodes.delete(code);
-      }
-      if (pairingCodes.size >= 8) pairingCodes.delete(pairingCodes.keys().next().value);
-      const code = "BABY-" + randomBytes(15).toString("base64url");
-      pairingCodes.set(code, now + pairingSeconds * 1000);
-      sendJSON(response, 200, { code, expiresIn: pairingSeconds, origin: url.origin });
-      return true;
-    }
-
-    if (pathname === "/api/pet/pair") {
-      if (extensionCors(request, response, ["POST"])) return true;
-      requireMethod(request, response, ["POST"], true);
-      limitRedemption();
-      const { code } = await readJSON(request);
-      if (typeof code !== "string" || !pairingPattern.test(code)) {
-        throw new HostedAuthError(400, "invalid-pairing-code");
-      }
-      const expiration = pairingCodes.get(code);
-      pairingCodes.delete(code);
-      if (!expiration || expiration <= Date.now()) throw new HostedAuthError(401, "pairing-code-expired");
-      sendJSON(response, 200, { token: mint("pet", petSessionSeconds), expiresIn: petSessionSeconds });
-      return true;
-    }
-
     return false;
   }
 
-  return { host: url.host, origin: url.origin, handle, requireOwner, requirePet, assertSameOrigin };
+  return { host: url.host, origin: url.origin, handle, requireOwner, assertSameOrigin };
 }

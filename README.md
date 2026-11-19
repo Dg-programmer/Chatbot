@@ -1,8 +1,10 @@
 # BABY
 
-BABY is an English voice companion for chat, file analysis, and questions about webpages. Talk through your microphone or type, then hear replies through your speakers. Use **Voice** for a larger microphone control and **Chat** for starter prompts.
+BABY is an English voice companion for chat and file analysis. Talk through your microphone or type, then hear replies through your speakers. Use **Voice** for a larger microphone control and **Chat** for starter prompts.
 
-For password-protected hosting with Gemini and a browser pet connected to the hosted app, see the [Render Free deployment guide](./RENDER.md).
+For password-protected hosting with Gemini, see the [Render Free deployment guide](./RENDER.md).
+
+BABY Desktop is a separate Windows app that keeps the movable pet available across desktop apps and monitors. Its **Screen** control can read visible text from the monitor where you place the pet.
 
 ## Run locally
 
@@ -29,21 +31,6 @@ Open [BABY on this device](http://127.0.0.1:4173). The project needs no npm depe
 With OpenAI connected on the local server, use **Attach files** beside the message field to add up to three files. Each file may be up to 8 MB, with a 12 MB combined limit. Supported files include PNG, JPEG, and WebP images, PDF, Word, Excel, PowerPoint, plain text, Markdown, CSV, TSV, and JSON documents, and MP3, WAV, M4A, OGG, and FLAC speech recordings.
 
 Send a question with the files or press **Send** for a summary. BABY sends the attached files to OpenAI when you send a message. Speech recordings are transcribed before analysis. Files stay available for follow-up questions in that browser tab until you remove them or reload. Chat history saves filenames and messages. To ask about the original content after a reload, attach the files again.
-
-## Ask about a webpage with the Browser Pet
-
-1. Start [local BABY](http://127.0.0.1:4173/setup) and connect your API key.
-2. In BABY, choose **Browser pet → Download extension**, then unzip the archive. The project’s `extension` folder can also be loaded directly.
-3. In desktop Chrome or Edge, open `chrome://extensions` or `edge://extensions`, enable **Developer mode**, select **Load unpacked**, and choose the folder named `extension`. Its `manifest.json` should be directly inside the selected folder.
-4. Reload an ordinary webpage, such as a Google results page. Click the floating pet, then choose **Summarize**, **Key facts**, or ask your own question. Keep the local BABY server running at port 4173.
-
-- Drag the floating pet to a convenient spot and click it to open the panel. The pet remembers its placement and positions the popup inside the viewport.
-- Press the microphone to ask a spoken question. Turn on the speaker to read future replies aloud, or press the play control on a reply. Microphone and voice availability depend on the browser and the current page.
-- Use the paperclip to attach images, documents, spreadsheets, presentations, text files, or audio recordings. The popup supports the same file limits as the workspace. You can ask about a file alongside the page or submit it by itself.
-- The panel has its own light and dark toggle. When you send a question, BABY sends readable text from the current page and the files you chose to your configured model. You can highlight a passage to focus the analysis.
-- To update an existing install, replace the files in the loaded folder, reload the extension in the extensions manager, and refresh the webpage.
-
-To rebuild the downloadable ZIP after editing the extension, run `python -m zipfile -c dist/baby-page-pet.zip extension` from the project folder.
 
 ## Connect a model locally
 

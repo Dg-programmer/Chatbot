@@ -74,7 +74,6 @@ let attachmentPicker = null;
 let hostedMode = false;
 let statusRequest = null;
 let statusCheckedAt = 0;
-let pairingTimer;
 let dialogChatId = null;
 let noticeTimer;
 
@@ -224,11 +223,7 @@ function renderEngine() {
 }
 
 function renderHostedControls() {
-  $("hosted-pairing").hidden = !hostedMode;
   $("hosted-sign-out").hidden = !hostedMode;
-  $("pet-run-local").hidden = hostedMode;
-  $("pet-run-hosted").hidden = !hostedMode;
-  if (hostedMode) $("pairing-origin").value = location.origin;
 }
 
 function applyConnectionStatus(status) {
@@ -284,45 +279,6 @@ function attachmentProblem(files) {
     return !attachmentExtensions.has(extension);
   });
   return unsupported ? `Remove “${unsupported.name}”. This connection doesn’t support that file format.` : "";
-}
-
-async function createPairingCode() {
-  const button = $("pairing-generate");
-  const status = $("pairing-message");
-  button.disabled = true;
-  status.textContent = "Creating a connection code…";
-  try {
-    const result = await fetch("./api/pet/pair-code", {
-      method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: "{}", cache: "no-store", redirect: "error",
-    });
-    if (result.status === 401) {
-      status.textContent = "Sign in again to create a connection code.";
-      return;
-    }
-    if (result.status === 429) {
-      status.textContent = "Wait a moment before creating another code.";
-      return;
-    }
-    const data = await result.json();
-    if (!result.ok || !/^BABY-[A-Za-z0-9_-]{20}$/u.test(data?.code ?? "")
-      || !Number.isInteger(data?.expiresIn) || data.expiresIn <= 0 || data.expiresIn > 900
-      || data.origin !== location.origin) throw new Error("pairing-response");
-    clearTimeout(pairingTimer);
-    $("pairing-code").value = data.code;
-    $("pairing-result").hidden = false;
-    const minutes = Math.ceil(data.expiresIn / 60);
-    status.textContent = "Use this code once within " + minutes + (minutes === 1 ? " minute." : " minutes.");
-    pairingTimer = setTimeout(() => {
-      $("pairing-result").hidden = true;
-      $("pairing-code").value = "";
-      status.textContent = "The code expired. Create a new one to connect.";
-    }, data.expiresIn * 1000);
-  } catch {
-    status.textContent = "A code couldn’t be created. Check your connection and try again.";
-  } finally {
-    button.disabled = false;
-  }
 }
 
 function renderSettings() {
@@ -823,21 +779,6 @@ for (const button of document.querySelectorAll("[data-background-choice]")) {
 }
 $("background-toggle").addEventListener("click", () => toggleBackgroundMenu($("background-menu").hidden));
 $("color-mode").addEventListener("click", () => setColorMode(prefs.colorMode === "dark" ? "light" : "dark"));
-$("pet-guide").addEventListener("click", () => $("pet-dialog").showModal());
-$("pairing-generate").addEventListener("click", createPairingCode);
-$("pairing-copy").addEventListener("click", async () => {
-  const input = $("pairing-code");
-  if (!input.value) return;
-  try {
-    await navigator.clipboard.writeText(input.value);
-    $("pairing-message").textContent = "Code copied.";
-  } catch {
-    input.focus();
-    input.select();
-    $("pairing-message").textContent = "Copy the selected code into the extension.";
-  }
-});
-if (location.protocol === "file:") $("pet-download").href = "./dist/baby-page-pet.zip";
 for (const button of document.querySelectorAll("[data-close]")) button.addEventListener("click", () => button.closest("dialog").close());
 for (const dialog of document.querySelectorAll("dialog")) {
   dialog.addEventListener("click", (event) => {

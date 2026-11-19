@@ -53,9 +53,6 @@
           </div>
         </div>
         <div class="topbar-end">
-          <button class="header-control" id="pet-guide" type="button" aria-haspopup="dialog" aria-controls="pet-dialog" aria-label="Get browser pet">
-            <span data-icon="pet"></span><span class="header-caption">Browser pet</span>
-          </button>
           <div class="background-control">
             <button class="header-control" id="background-toggle" type="button" aria-label="Change background" aria-expanded="false" aria-controls="background-menu">
               <span data-icon="layers"></span><span class="header-caption">Background</span>
@@ -135,42 +132,6 @@
       </footer>
     </main>
   </div>
-
-  <dialog class="dialog pet-dialog" id="pet-dialog" aria-labelledby="pet-title">
-    <div class="dialog-title"><h2 id="pet-title">BABY Browser Pet</h2><button type="button" class="icon-button" data-close data-label="close" data-icon="x"></button></div>
-    <div class="dialog-form">
-      <div class="pet-guide-summary">
-        <img src="./pet.webp" width="68" height="68" alt="">
-        <p>Move BABY around a webpage, then click to chat, speak, or attach a file.</p>
-      </div>
-      <ol class="pet-steps">
-        <li>Download and unzip the extension.</li>
-        <li>Open <code>chrome://extensions</code> or <code>edge://extensions</code> and turn on <strong>Developer mode</strong>.</li>
-        <li>Choose <strong>Load unpacked</strong> and select the extracted folder named <strong>extension</strong>.</li>
-        <li id="pet-run-local">Keep local BABY open and connected. Reload the webpage, then click the pet.</li>
-        <li id="pet-run-hosted" hidden>Pair the extension with your hosted BABY below. Reload the webpage, then click the pet.</li>
-      </ol>
-      <p class="dialog-note">When you send a question, BABY sends readable page text and attached files to your connected model.</p>
-      <section class="pairing" id="hosted-pairing" aria-labelledby="pairing-title" hidden>
-        <h3 id="pairing-title">Connect the extension</h3>
-        <p>Open the pet’s <strong>Connection settings</strong> and paste this address and a one-time code.</p>
-        <label for="pairing-origin">Hosted address</label>
-        <input id="pairing-origin" readonly spellcheck="false">
-        <div id="pairing-result" class="pairing-result" hidden>
-          <label for="pairing-code">Connection code</label>
-          <div class="pairing-row">
-            <input id="pairing-code" readonly spellcheck="false" autocomplete="off">
-            <button class="secondary" id="pairing-copy" type="button"><span data-icon="copy"></span>Copy</button>
-          </div>
-        </div>
-        <button class="secondary" id="pairing-generate" type="button">Create connection code</button>
-        <p class="dialog-note" id="pairing-message" role="status"></p>
-      </section>
-      <div class="dialog-actions">
-        <a class="primary" id="pet-download" href="./baby-page-pet.zip" download><span data-icon="download"></span>Download extension</a>
-      </div>
-    </div>
-  </dialog>
 
   <dialog class="dialog" id="settings-dialog" aria-labelledby="settings-title">
     <div class="dialog-title"><h2 id="settings-title" data-text="voiceSettings"></h2><button type="button" class="icon-button" data-close data-label="close" data-icon="x"></button></div>

@@ -247,22 +247,6 @@ svg { display: block; width: 19px; height: 19px; flex: none; }
 .destructive { color: #fff; background: #9f3150; border-color: #962b4a; }
 .primary:hover, .secondary:hover, .destructive:hover { filter: brightness(1.08); }
 .primary svg { width: 15px; height: 15px; }
-.pet-dialog { width: min(calc(100% - 30px), 470px); }
-.pet-guide-summary { display: flex; align-items: center; gap: 13px; padding: 9px; background: linear-gradient(140deg,#f0f8ff,#e2f1ff); border: 1px solid #d2e6f8; border-radius: 12px; }
-.pet-guide-summary img { width: 62px; height: 62px; object-fit: contain; flex: none; }
-.pet-steps { display: grid; gap: 7px; margin: 1px 0; padding-left: 21px; line-height: 1.55; }
-.pet-steps code { padding: 2px 4px; background: #e7f3ff; border-radius: 4px; color: #205493; font: 11px var(--mono); white-space: nowrap; }
-.pairing { display: grid; gap: 7px; padding: 11px; border: 1px solid var(--line); border-radius: 11px; background: var(--soft); }
-.pairing h3 { margin: 0; font-size: 13px; color: var(--text); }
-.pairing label { font-size: 11px; font-weight: 750; }
-.pairing input { width: 100%; min-width: 0; padding: 7px 8px; border: 1px solid var(--line-strong); border-radius: 7px; color: var(--text); background: var(--white); font: 11px var(--mono); }
-.pairing-result { display: grid; gap: 4px; }
-.pairing-row { display: flex; align-items: center; gap: 6px; }
-.pairing-row .secondary { flex: none; }
-.pairing-row .secondary svg { width: 13px; height: 13px; }
-.pairing > .secondary { justify-self: start; }
-.pairing .dialog-note:empty { display: none; }
-
 /* The dark workspace uses smoked surfaces around the same illuminated stage. */
 :root[data-color-mode="dark"] {
   color-scheme: dark;
@@ -336,8 +320,7 @@ svg { display: block; width: 19px; height: 19px; flex: none; }
 [data-color-mode="dark"] .dialog-form { color: #d9e8fa; }
 [data-color-mode="dark"] .dialog-note { color: #a8bdd8; }
 [data-color-mode="dark"] :is(.setting-row select,.history-search,#title-input) { background: #172336; border-color: #496380; color: #dceafe; }
-[data-color-mode="dark"] :is(.secondary,.pet-guide-summary) { background: #293c55; border-color: #496685; color: #dfedff; }
-[data-color-mode="dark"] .pet-steps code { background: #17253a; color: #bcdaff; }
+[data-color-mode="dark"] .secondary { background: #293c55; border-color: #496685; color: #dfedff; }
 [data-color-mode="dark"] .switch { background: #162133; border-color: #526d8c; }
 [data-color-mode="dark"] .switch:checked { background: #2462a8; border-color: #5688c2; }
 [data-color-mode="dark"] :focus-visible { outline-color: #91c8ff; }
