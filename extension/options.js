@@ -7,7 +7,7 @@ const [status, open, check, local, pair, originInput, codeInput, connect, feedba
 const visibility = get("visibility");
 const visibilityStatus = get("visibility-status");
 const visibilityKey = "babyPetVisibility";
-const visibilityModes = new Set(["automatic", "browser", "toolbar"]);
+const visibilityModes = new Set(["automatic", "toolbar"]);
 const errors = {
   "invalid-host": "Enter the HTTPS address of your hosted BABY without a page path.",
   "invalid-pairing-code": "Copy the complete pairing code from your signed-in BABY.",

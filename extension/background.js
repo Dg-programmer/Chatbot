@@ -3,20 +3,21 @@ import { readConnection, saveConnection } from "./connection-store.js";
 
 const toggle = "saathi:toggle";
 const presenceUrl = "http://127.0.0.1:43179/baby-presence";
-const presenceCacheMs = 2200;
 const maxTextBytes = 120 * 1024;
 const maxFileBytes = 8 * 1024 * 1024;
 const maxAttachmentBytes = 12 * 1024 * 1024;
-let cachedPresence;
-let presenceExpires = 0;
-let pendingPresence;
+const presenceClient = crypto.randomUUID().replaceAll("-", "");
+let presenceQueue = Promise.resolve();
+let browserClaim;
+let focusRevision = 0;
 
 function isPage(sender) {
   return sender.id === chrome.runtime.id && Number.isInteger(sender.tab?.id) && sender.frameId === 0
     && typeof sender.url === "string" && /^https?:\/\//u.test(sender.url);
 }
 
-async function probeDesktopPresence() {
+async function requestDesktopOwner(body) {
+  let connected = false;
   try {
     const response = await fetch(presenceUrl, {
       method: "POST",
@@ -25,11 +26,12 @@ async function probeDesktopPresence() {
       redirect: "error",
       cache: "no-store",
       headers: { "Content-Type": "application/json" },
-      body: "{}",
-      signal: AbortSignal.timeout(1100),
+      body,
+      signal: AbortSignal.timeout(900),
     });
+    connected = true;
     const type = response.headers.get("Content-Type")?.split(";", 1)[0].trim().toLowerCase();
-    if (!response.ok || type !== "application/json" || !response.body) return false;
+    if (!response.ok || type !== "application/json" || !response.body) return "desktop";
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let bytes = 0;
@@ -41,32 +43,85 @@ async function probeDesktopPresence() {
         bytes += value.byteLength;
         if (bytes > 256) {
           await reader.cancel();
-          return false;
+          return "desktop";
         }
         text += decoder.decode(value, { stream: true });
       }
       const status = JSON.parse(text + decoder.decode());
-      return status?.service === "baby-desktop" && status.running === true;
+      return status?.service === "baby-desktop" && status.running === true && status.owner === "browser" ? "browser" : "desktop";
     } finally {
       reader.releaseLock();
     }
-  } catch {
-    return false;
+  } catch (error) {
+    // A slow bridge may still have a visible desktop pet. A missing listener lets the extension run on its own.
+    return !connected && error?.name === "TypeError" ? "unavailable" : "desktop";
   }
 }
 
-function desktopPresence() {
-  // Multiple visible browser windows can share a probe without waking Desktop BABY.
-  if (performance.now() < presenceExpires) return Promise.resolve(cachedPresence);
-  if (!pendingPresence) {
-    pendingPresence = probeDesktopPresence().then((running) => {
-      cachedPresence = { running };
-      presenceExpires = performance.now() + presenceCacheMs;
-      return cachedPresence;
-    }).finally(() => { pendingPresence = undefined; });
-  }
-  return pendingPresence;
+async function reportDesktopPresence(active) {
+  const owner = await requestDesktopOwner(JSON.stringify({ active, client: presenceClient }));
+  if (owner !== "unavailable" || !active) return owner;
+  // The older desktop bridge accepts only an empty object. Detect it so upgrades cannot create two pets.
+  return await requestDesktopOwner("{}") === "unavailable" ? "unavailable" : "desktop";
 }
+
+function queuePresence(update) {
+  const task = presenceQueue.then(update);
+  presenceQueue = task.catch(() => {});
+  return task;
+}
+
+async function releasePresence(claim) {
+  if (!claim || browserClaim !== claim) return;
+  browserClaim = undefined;
+  if (claim.reported) await reportDesktopPresence(false);
+}
+
+function checkPagePresence(sender, active) {
+  const { id: tabId, windowId } = sender.tab;
+  const documentId = sender.documentId;
+  const revision = focusRevision;
+  return queuePresence(async () => {
+    const prior = browserClaim;
+    const samePage = prior?.tabId === tabId && prior.documentId === documentId;
+    let focused = false;
+    if (active && revision === focusRevision && (!sender.documentLifecycle || sender.documentLifecycle === "active")) {
+      const window = await chrome.windows.getLastFocused();
+      if (window.focused && window.id === windowId) {
+        const [tab] = await chrome.tabs.query({ active: true, windowId });
+        focused = tab?.id === tabId;
+      }
+    }
+    if (!focused || revision !== focusRevision) {
+      if (samePage) await releasePresence(prior);
+      return { visible: false };
+    }
+    const claim = { tabId, windowId, documentId, reported: true };
+    browserClaim = claim;
+    const owner = await reportDesktopPresence(true);
+    claim.reported = owner !== "unavailable";
+    if (focusRevision !== revision) {
+      await releasePresence(claim);
+      return { visible: false };
+    }
+    return { visible: owner === "browser" || owner === "unavailable" };
+  });
+}
+
+function pageFocusChanged(lostFocus) {
+  focusRevision += 1;
+  const prior = browserClaim;
+  if (!prior || !lostFocus(prior)) return;
+  const target = { frameId: 0, ...(prior.documentId ? { documentId: prior.documentId } : {}) };
+  chrome.tabs.sendMessage(prior.tabId, { type: "baby:pet:lost-focus" }, target).catch(() => {});
+  void queuePresence(() => releasePresence(prior));
+}
+
+chrome.windows.onFocusChanged.addListener((windowId) => pageFocusChanged((claim) => claim.windowId !== windowId));
+chrome.tabs.onActivated.addListener(({ tabId, windowId }) => pageFocusChanged((claim) => claim.windowId === windowId && claim.tabId !== tabId));
+chrome.tabs.onRemoved.addListener((tabId) => {
+  if (browserClaim?.tabId === tabId) pageFocusChanged(() => true);
+});
 
 function sanitizeAttachments(files) {
   if (!Array.isArray(files) || files.length > 3) return null;
@@ -214,7 +269,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return;
   }
   if (!isPage(sender)) return;
-  if (type === "baby:desktop:presence") return sendResult(desktopPresence(), sendResponse);
+  if (type === "baby:desktop:presence" && typeof message.active === "boolean") {
+    return sendResult(checkPagePresence(sender, message.active), sendResponse);
+  }
   if (type === "baby:connection:open") {
     chrome.runtime.openOptionsPage().catch(() => {});
     return;

@@ -9,8 +9,7 @@
     placement: "babyPetPlacement", theme: "babyPetTheme",
     speech: "babyPetReadAloud", visibility: "babyPetVisibility",
   });
-  const visibilityModes = new Set(["automatic", "browser", "toolbar"]);
-  const presencePollMs = 3200;
+  const presencePollMs = 600;
   const svgPaths = {
     close: "m6 6 12 12M6 18 18 6",
     page: "M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zm0 0v6h6M8 13h8m-8 4h5",
@@ -471,7 +470,7 @@
       history = [...history, { role: "user", text: question }, { role: "assistant", text: reply }].slice(-10);
       if (input.value.trim() === question) input.value = "";
       setConnection("on", "AI connected");
-      if (readAloud && !panel.hidden) voice.speak(reply);
+      if (readAloud && !host.hidden && !panel.hidden) voice.speak(reply);
     } else {
       const code = result?.error || "analysis-failed";
       if (["server-offline", "provider-unconfigured", "provider-auth", "extension-auth-required", "host-permission-required", "connection-unavailable"].includes(code)) {
@@ -508,8 +507,8 @@
       if (!host.hidden) setPanelOpen(true);
     } else {
       manualVisibility = false;
-      setPanelOpen(false, defaultPetVisible());
-      renderPetVisibility();
+      setPanelOpen(false, visibilityMode === "automatic");
+      restartPresence();
     }
   }
 
@@ -525,17 +524,22 @@
   let speechChanged = false;
   let visibilityLoaded = false;
   let visibilityMode = "automatic";
-  let desktopRunning = true;
   let manualVisibility = false;
+  let panelRequested = false;
+  let trackingPresence = false;
+  let pageSuspended = false;
   let presenceRevision = 0;
   let presenceTimer;
 
-  function defaultPetVisible() {
-    return visibilityLoaded && (visibilityMode === "browser" || (visibilityMode === "automatic" && !desktopRunning));
+  function pageVisible() {
+    return !pageSuspended && !document.hidden && !document.prerendering;
   }
 
-  function renderPetVisibility() {
-    const visible = manualVisibility || defaultPetVisible();
+  function wantsPet() {
+    return pageVisible() && (manualVisibility || (visibilityLoaded && visibilityMode === "automatic"));
+  }
+
+  function renderPetVisibility(visible) {
     if (host.hidden === !visible) return;
     if (!visible) {
       if (drag) {
@@ -543,38 +547,55 @@
         endDrag({ pointerId });
         if (pet.hasPointerCapture?.(pointerId)) pet.releasePointerCapture(pointerId);
       }
-      if (!panel.hidden) setPanelOpen(false, false);
-      else stopVoice();
+      stopVoice();
     }
     host.hidden = !visible;
-    if (visible) scheduleLayout();
+    if (visible) {
+      if (panelRequested) {
+        panelRequested = false;
+        setPanelOpen(true);
+      }
+      scheduleLayout();
+    }
   }
 
   async function refreshPresence(revision) {
-    let response;
-    try {
-      response = await chrome.runtime.sendMessage({ type: "baby:desktop:presence" });
-    } catch {
-      // The browser pet remains usable when Desktop BABY cannot be reached.
+    if (!chrome.runtime?.id) {
+      renderPetVisibility(false);
+      host.remove();
+      return;
     }
-    if (revision !== presenceRevision || document.hidden) return;
-    desktopRunning = response?.running === true;
-    renderPetVisibility();
-    presenceTimer = setTimeout(() => refreshPresence(revision), presencePollMs);
+    if (wantsPet()) {
+      trackingPresence = true;
+      let response;
+      try {
+        response = await chrome.runtime.sendMessage({ type: "baby:desktop:presence", active: true });
+      } catch {
+        // A disabled or reloaded extension cannot keep a visible pet on the page.
+      }
+      if (revision !== presenceRevision || !wantsPet()) return;
+      renderPetVisibility(response?.visible === true);
+    }
+    // Toolbar-only tabs still retire their DOM after context invalidation, without waking the service worker.
+    if (pageVisible()) presenceTimer = setTimeout(() => refreshPresence(revision), presencePollMs);
   }
 
   function restartPresence() {
     clearTimeout(presenceTimer);
     const revision = ++presenceRevision;
-    renderPetVisibility();
-    if (visibilityLoaded && visibilityMode === "automatic" && !document.hidden) refreshPresence(revision);
+    if (!wantsPet()) {
+      renderPetVisibility(false);
+      if (trackingPresence && chrome.runtime?.id) {
+        trackingPresence = false;
+        chrome.runtime.sendMessage({ type: "baby:desktop:presence", active: false }).catch(() => {});
+      }
+    }
+    if (pageVisible()) void refreshPresence(revision);
   }
 
   function setVisibilityMode(value) {
-    visibilityMode = visibilityModes.has(value) ? value : "automatic";
+    visibilityMode = value === "toolbar" ? "toolbar" : "automatic";
     visibilityLoaded = true;
-    manualVisibility = false;
-    desktopRunning = true;
     restartPresence();
   }
 
@@ -737,11 +758,17 @@
     scheduleLayout();
   }).catch(() => { if (!visibilityLoaded) setVisibilityMode("automatic"); });
   document.addEventListener("visibilitychange", restartPresence);
+  document.addEventListener("prerenderingchange", restartPresence);
+  window.addEventListener("focus", restartPresence);
   window.addEventListener("pagehide", () => {
-    clearTimeout(presenceTimer);
-    presenceRevision += 1;
+    pageSuspended = true;
+    restartPresence();
   });
-  window.addEventListener("pageshow", (event) => { if (event.persisted) restartPresence(); });
+  window.addEventListener("pageshow", () => {
+    if (!pageSuspended) return;
+    pageSuspended = false;
+    restartPresence();
+  });
   chrome.storage?.onChanged?.addListener((changes, area) => {
     if (area !== "local") return;
     if (preferences.visibility in changes) setVisibilityMode(changes[preferences.visibility].newValue);
@@ -847,12 +874,26 @@
     }
   });
   chrome.runtime.onMessage.addListener((message, sender, respond) => {
-    if (sender.id !== chrome.runtime.id || message?.type !== "saathi:toggle") return;
-    if (panel.hidden) {
+    if (sender.id !== chrome.runtime.id) return;
+    if (message?.type === "baby:pet:lost-focus") {
+      renderPetVisibility(false);
+      restartPresence();
+      return;
+    }
+    if (message?.type !== "saathi:toggle") return;
+    if (panelRequested || (!host.hidden && !panel.hidden)) {
+      panelRequested = false;
+      manualVisibility = false;
+      setPanelOpen(false, !host.hidden && visibilityMode === "automatic");
+      restartPresence();
+    } else if (host.hidden) {
       manualVisibility = true;
-      renderPetVisibility();
+      panelRequested = true;
+      restartPresence();
+    } else {
+      manualVisibility = true;
       setPanelOpen(true);
-    } else togglePanel();
+    }
     respond({ toggled: true });
   });
 })();
